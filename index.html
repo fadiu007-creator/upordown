@@ -112,6 +112,7 @@
             margin-right: 8px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .hint { color: #9ca3af; font-size: .8rem; margin-top: 16px; }
     </style>
 </head>
 <body>
@@ -120,7 +121,7 @@
         <h1>Is it down?</h1>
         <p class="sub">Check if a website is online or offline.</p>
         <div class="row">
-            <input id="domain" type="text" placeholder="example.com" />
+            <input id="domain" type="text" placeholder="google.com or https://www.google.com" />
             <button id="checkBtn">Check</button>
         </div>
         <div class="spinner" id="spinner"></div>
@@ -128,6 +129,7 @@
             <div class="status" id="status"></div>
             <div class="meta" id="meta"></div>
         </div>
+        <p class="hint">Enter domain with or without http://, https://, www — all formats work.</p>
     </div>
     <script>
         const btn = document.getElementById('checkBtn');
@@ -137,39 +139,76 @@
         const metaEl = document.getElementById('meta');
         const spinner = document.getElementById('spinner');
 
+        // Extract domain from any URL format
+        function extractDomain(url) {
+            if (!url) return '';
+            // Remove protocol
+            url = url.replace(/^https?:\/\//, '');
+            // Remove www
+            url = url.replace(/^www\./, '');
+            // Remove path, query, hash
+            url = url.split(/[/?#]/)[0];
+            return url.toLowerCase().trim();
+        }
+
         btn.addEventListener('click', async () => {
-            const domain = input.value.trim().toLowerCase();
-            if (!/^[\w-]+(\.[\w-]+)+$/.test(domain)) {
-                alert('Please enter a valid domain, e.g. example.com');
+            const raw = input.value.trim();
+            const domain = extractDomain(raw);
+            
+            if (!domain || !/^[\w-]+(\.[\w-]+)+$/.test(domain)) {
+                alert('Please enter a valid domain, e.g. google.com or https://www.google.com');
                 return;
             }
+            
             btn.disabled = true;
             btn.innerHTML = 'Checking<span class="spinner"></span>';
             spinner.style.display = 'inline-block';
             result.classList.remove('show');
-            try {
-                const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://api.isitdown.org/' + domain)}`);
-                if (!res.ok) throw new Error('API error ' + res.status);
-                const data = await res.json();
-                const info = Array.isArray(data) ? data[0] : data;
-                const isUp = info.status === 'up';
-                statusEl.textContent = isUp ? '✅ UP' : '❌ DOWN';
-                statusEl.className = 'status ' + (isUp ? 'up' : 'down');
-                const meta = [];
-                if (info.responseTime) meta.push(`Response time: ${info.responseTime}ms`);
-                if (info.error) meta.push(`Error: ${info.error}`);
-                metaEl.innerHTML = meta.length ? meta.join('<br>') : 'No additional details.';
-                result.classList.add('show');
-            } catch (e) {
+            
+            // Try direct fetch first (some browsers allow it via CORS), then fallback to proxy
+            const endpoints = [
+                `https://api.isitdown.org/${domain}`, // Direct (may work in some browsers)
+                `https://api.allorigins.win/raw?url=${encodeURIComponent('https://api.isitdown.org/' + domain)}` // Proxy
+            ];
+            
+            let success = false;
+            for (const endpoint of endpoints) {
+                try {
+                    const res = await fetch(endpoint, { signal: AbortSignal.timeout(8000) });
+                    if (!res.ok) throw new Error('API error ' + res.status);
+                    const data = await res.json();
+                    const info = Array.isArray(data) ? data[0] : data;
+                    const isUp = info.status === 'up';
+                    statusEl.textContent = isUp ? '✅ UP' : '❌ DOWN';
+                    statusEl.className = 'status ' + (isUp ? 'up' : 'down');
+                    const meta = [];
+                    if (info.responseTime) meta.push(`Response time: ${info.responseTime}ms`);
+                    if (info.error) meta.push(`Error: ${info.error}`);
+                    metaEl.innerHTML = meta.length ? meta.join('<br>') : 'No additional details.';
+                    result.classList.add('show');
+                    success = true;
+                    break;
+                } catch (e) {
+                    // Try next endpoint
+                    continue;
+                }
+            }
+            
+            if (!success) {
                 result.classList.add('show');
                 statusEl.textContent = '⚠️ Error';
                 statusEl.className = 'status down';
                 metaEl.textContent = 'Failed to fetch — the status service may be unreachable. Try again later.';
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = 'Check';
-                spinner.style.display = 'none';
             }
+            
+            btn.disabled = false;
+            btn.innerHTML = 'Check';
+            spinner.style.display = 'none';
+        });
+        
+        // Enter key to check
+        input.addEventListener('keypress', e => {
+            if (e.key === 'Enter') btn.click();
         });
     </script>
 </body>
