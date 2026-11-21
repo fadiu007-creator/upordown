@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Site Up/Down Checker</title>
+    <style>
+        body {font-family:Arial, sans-serif; margin:2rem;}
+        input {width:300px; padding:0.5rem;}
+        button {padding:0.5rem 1rem;}
+        .result {margin-top:1rem;}
+        .up {color:green;}
+        .down {color:red;}
+    </style>
+</head>
+<body>
+    <h1>Website Up/Down Checker</h1>
+    <input type="text" id="url" placeholder="Enter URL (e.g. example.com)" />
+    <button onclick="check()">Check</button>
+    <div class="result" id="result"></div>
+    <script>
+        async function check() {
+            const input = document.getElementById('url');
+            const rawUrl = input.value.trim();
+            if (!rawUrl) { alert('Please enter a URL'); return; }
+
+            // Strip protocol if present
+            let url = rawUrl;
+            if (url.startsWith('http://')) url = url.slice(7);
+            else if (url.startsWith('https://')) url = url.slice(8);
+            const domain = url.split('/')[0]; // get domain only
+
+            const div = document.getElementById('result');
+            div.innerHTML = 'Checking...';
+
+            try {
+                const apiUrl = `https://api.isitdown.org/${domain}`;
+                const resp = await fetch(apiUrl);
+                if (!resp.ok) throw new Error('API error');
+                const data = await resp.json();
+                if (data.status === 'online') {
+                    div.innerHTML = `<p class="up">✅ ${rawUrl} is UP (online)</p>`;
+                } else {
+                    div.innerHTML = `<p class="down">❌ ${rawUrl} is DOWN (offline)</p>`;
+                }
+            } catch (e) {
+                div.innerHTML = `<p class="down">❌ Could not check: ${e.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
